@@ -2,123 +2,157 @@ package idgen
 
 import (
 	"context"
+	"log"
 	"sync"
-	"sync/atomic"
-
-	"github.com/ryanreadbooks/folium/internal/segment/dao"
+	"time"
 )
 
-type segment struct {
-	sync.Mutex
-	key  string
-	max  uint64
-	step uint32
-	cur  uint64
-}
-
-func newSegment(key string) (*segment, error) {
-	sg := &segment{key: key}
-	err := sg.fetchDB()
-	return sg, err
-}
-
-// returns the current id and increment current id
-func (s *segment) nextAndIncr() uint64 {
-	var old, nuevo uint64
-	for {
-		old = atomic.LoadUint64(&s.cur)
-		nuevo = old + 1
-		if atomic.CompareAndSwapUint64(&s.cur, old, nuevo) {
-			return old
-		}
-	}
-}
-
-// update max id
-func (s *segment) update(max uint64, step uint32) {
-	s.Lock()
-	defer s.Unlock()
-
-	s.step = step
-	s.max = max + uint64(s.step)
-	atomic.AddUint64(&s.cur, max) // we need to update the current id
-}
-
-// check if current id overflow
-func (s *segment) overflow() bool {
-	return atomic.LoadUint64(&s.cur) >= s.max
-}
-
-// fetch from db and update segment
-func (s *segment) fetchDB() error {
-	curId, step, err := dao.ConsumeKey(context.TODO(), s.key)
-	if err != nil {
-		return err
-	}
-
-	s.update(curId, step)
-	return nil
-}
+const (
+	watermark = 0.85
+)
 
 // buffer holds two segments which dispense ids
 type buffer struct {
 	sync.RWMutex
-	key string
-	cur *segment // cur points to one or two
-	one *segment
-	two *segment
+
+	key  string
+	cur  *segment // cur points to seg1 or seg2
+	seg1 *segment
+	seg2 *segment
+
+	closeCh chan struct{}
 }
 
-func newBuffer(key string) (*buffer, error) {
-	one, err := newSegment(key)
+func newBuffer(ctx context.Context, key string) (*buffer, error) {
+	seg1 := newSegment(key)
+	err := seg1.fetchDB(ctx, 0) // need to be synced with db
 	if err != nil {
 		return nil, err
 	}
-	two, err := newSegment(key)
-	if err != nil {
-		return nil, err
-	}
+	seg1.name = "seg1"
+	log.Printf("seg1 loaded with %+v\n", seg1)
+	seg2 := newSegment(key)
+	seg2.name = "seg2"
+
 	b := &buffer{
-		key: key,
-		one: one,
-		two: two,
-		cur: one,
+		key:     key,
+		seg1:    seg1,
+		seg2:    seg2, // we do not fetchDB in the first place
+		cur:     seg1,
+		closeCh: make(chan struct{}),
 	}
+
+	// go b.worker()
 
 	return b, nil
 }
 
-func (b *buffer) swap() {
-	if b.cur == b.one {
-		b.cur = b.two
+// swap without lock
+func (b *buffer) swap(ctx context.Context) error {
+	if b.cur == b.seg1 {
+		// make sure we are swapping into maxinum segment
+		if b.seg1.max > b.seg2.max {
+			err := b.seg2.fetchDB(ctx, 0)
+			if err != nil {
+				log.Printf("buffer swap to seg2 fetchDB err: %v\n", err)
+				return err
+			}
+			log.Printf("buffer swap to seg2 fetchDB: %+v\n", b.seg2)
+		}
+		b.cur = b.seg2
 	} else {
-		b.cur = b.one
+		if b.seg1.max < b.seg2.max {
+			err := b.seg1.fetchDB(ctx, 0)
+			if err != nil {
+				log.Printf("buffer swap to seg1 fetchDB err: %v\n", err)
+				return err
+			}
+			log.Printf("buffer swap to seg1 fetchDB: %+v\n", b.seg1)
+		}
+		b.cur = b.seg1
 	}
+
+	return nil
 }
 
-func (b *buffer) curSegment() *segment {
+func (b *buffer) curSeg() *segment {
 	return b.cur
 }
 
-func (b *buffer) bakSegment() *segment {
-	if b.cur == b.one {
-		return b.two
+func (b *buffer) bakSeg() *segment {
+	if b.cur == b.seg1 {
+		return b.seg2
 	}
-	return b.one
+	return b.seg1
 }
 
-func (b *buffer) getId() (uint64, error) {
+func (b *buffer) getId(ctx context.Context) (uint64, error) {
 	for {
-		b.RLock()
-		val := b.curSegment().nextAndIncr()
-		if val < b.curSegment().max {
+		b.Lock()
+		curSeg := b.curSeg()
+		val := curSeg.nextAndIncr()
+		if val < curSeg.max {
+			b.Unlock()
 			return val, nil
 		}
-		b.RUnlock()
 
 		// val is overflow, we need to switch segment and get the next id again
-		b.Lock()
-		b.swap()
+		var err error = b.swap(ctx)
+		if err != nil {
+			log.Printf("buffer getId swap err: %v\n", err)
+			b.Unlock()
+			return 0, err
+		}
 		b.Unlock()
 	}
+}
+
+// preload will check and do swapping stuff after get Id
+// just to prevent worker is not working properly
+func (b *buffer) preload() {
+	defer func() {
+		if err := recover(); err != nil {
+			log.Printf("buffer postGetId panic: %v\n", err)
+		}
+	}()
+
+	b.Lock()
+	defer b.Unlock()
+
+	// we hit watermark
+	if b.curSeg().hitMark(watermark) {
+		// load the other segment
+		err := b.bakSeg().fetchDB(context.Background(), 0)
+		if err != nil {
+			log.Printf("buffer postGetId fetchDB err: %v\n", err)
+			return
+		}
+		log.Printf("buffer loaded segment updated: %+v\n", b.bakSeg())
+	}
+}
+
+// worker the situation of two segments
+func (b *buffer) worker() {
+	defer func() {
+		if err := recover(); err != nil {
+			log.Printf("buffer monitor panic: %v\n", err)
+			go b.worker()
+		}
+	}()
+
+	ticker := time.NewTicker(time.Millisecond * 500)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			b.preload()
+		case <-b.closeCh:
+			log.Println("buffer worker exited")
+			return
+		}
+	}
+}
+
+func (b *buffer) close() {
+	b.closeCh <- struct{}{}
 }

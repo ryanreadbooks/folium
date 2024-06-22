@@ -28,6 +28,7 @@ func NewErr(code int, msg string) *Err {
 }
 
 var (
-	ErrDb = NewErr(int(codes.Internal), "db err")
+	ErrDb          = NewErr(int(codes.Internal), "db err")
 	ErrInvalidArgs = NewErr(int(codes.InvalidArgument), "invalid args")
+	ErrInternal    = NewErr(int(codes.Internal), "server error")
 )
