@@ -13,14 +13,14 @@ import (
 func TestBuffer_newBuffer(t *testing.T) {
 	defer clean()
 
-	_, err := newBuffer(ctx, "biz-test")
+	_, err := newBuffer(ctx, "biz-test", 0)
 	assert.Nil(t, err)
 }
 
 func TestBuffer_getId(t *testing.T) {
 	defer clean()
 
-	buf, err := newBuffer(ctx, "biz-test")
+	buf, err := newBuffer(ctx, "biz-test", 0)
 	assert.Nil(t, err)
 	assert.NotNil(t, buf)
 
@@ -32,7 +32,7 @@ func TestBuffer_getId(t *testing.T) {
 func TestBuffer_concurrentGetId(t *testing.T) {
 	defer clean()
 
-	buf, err := newBuffer(ctx, "biz-test")
+	buf, err := newBuffer(ctx, "biz-test", 0)
 	assert.Nil(t, err)
 	assert.NotNil(t, buf)
 

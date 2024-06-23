@@ -1,6 +1,8 @@
 package server
 
 import (
+	"errors"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -9,22 +11,41 @@ import (
 )
 
 var (
-	httpServer *http.Server
+	serverHttp *http.Server
 	eng        *gin.Engine
 )
 
-func InitHttp() {
+func init() {
 	idgen.Init()
+}
+
+func CloseServer() {
+	CloseHttp()
+	CloseGrpc()
+	idgen.Close()
+}
+
+func InitHttp() {
 	initRoute()
 
-	go http.ListenAndServe(":9527", eng)
+	go func() {
+		if err := http.ListenAndServe(":9527", eng); !errors.Is(err, http.ErrServerClosed) {
+			log.Fatal(err)
+		}
+	}()
+}
+
+func CloseHttp() {
+	if serverHttp != nil {
+		serverHttp.Close()
+	}
 }
 
 func initRoute() {
 	eng = gin.Default()
 
-	// /api/v1/:key?step=xxx
-	eng.GET("/api/v1/:key", nextForKey)
+	// /api/v1/next/:key?step=xxx
+	eng.GET("/api/v1/next/:key", nextForKey)
 }
 
 type Result struct {
@@ -35,16 +56,8 @@ type Result struct {
 func nextForKey(c *gin.Context) {
 	key := c.Param("key")
 	step := c.Query("step")
-	if len(step) != 0 {
-		ss, err := strconv.Atoi(step)
-		if err == nil {
-			// getIdWithStep
-			idgen.GetNextWithStep(c, key, uint32(ss))
-			return
-		}
-	}
-
-	id, err := idgen.GetNext(c, key)
+	stepNum, _ := strconv.Atoi(step)
+	id, err := idgen.GetNext(c, key, idgen.WithStep(uint32(stepNum)))
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, &Result{
 			Msg: err.Error(),

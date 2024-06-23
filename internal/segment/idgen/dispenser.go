@@ -31,14 +31,34 @@ func Init() {
 	closed.Store(false)
 }
 
+type GetOption struct {
+	Step uint32
+}
+
+type Option func(*GetOption)
+
+func WithStep(step uint32) Option {
+	return func(o *GetOption) {
+		o.Step = step
+		if o.Step > maxStepAllowed {
+			o.Step = maxStepAllowed
+		}
+	}
+}
+
 // GetNext returns the next id for key
-func GetNext(ctx context.Context, key string) (uint64, error) {
+func GetNext(ctx context.Context, key string, opt ...Option) (uint64, error) {
 	if closed.Load() {
 		return 0, ErrClosed
 	}
 
 	if len(key) == 0 {
 		return 0, pkg.ErrInvalidArgs.Message("key is empty")
+	}
+
+	gOpt := &GetOption{}
+	for _, o := range opt {
+		o(gOpt)
 	}
 
 	var (
@@ -50,9 +70,9 @@ func GetNext(ctx context.Context, key string) (uint64, error) {
 	val, ok := bufs.Load(key)
 	if !ok {
 		// buf is new here, we need to create it now
-		buf, err = newBuffer(ctx, key)
+		buf, err = newBuffer(ctx, key, gOpt.Step)
 		if err != nil {
-			return 0, pkg.ErrInternal.Message(err.Error())
+			return 0, pkg.ErrInternal
 		}
 		bufs.Store(key, buf)
 	} else {
@@ -64,28 +84,10 @@ func GetNext(ctx context.Context, key string) (uint64, error) {
 
 	id, err := buf.getId(ctx)
 	if err != nil {
-		return 0, pkg.ErrInternal.Message(err.Error())
+		return 0, pkg.ErrInternal
 	}
 
 	return id, nil
-}
-
-func GetNextWithStep(ctx context.Context, key string, step uint32) (uint64, error) {
-	if closed.Load() {
-		return 0, ErrClosed
-	}
-
-	if len(key) == 0 {
-		return 0, pkg.ErrInvalidArgs.Message("key is empty")
-	}
-
-	if step > maxStepAllowed {
-		return 0, pkg.ErrInvalidArgs.Message("step is too large")
-	}
-
-	// make sure step becomes effective
-
-	return 0, nil
 }
 
 func Close() {

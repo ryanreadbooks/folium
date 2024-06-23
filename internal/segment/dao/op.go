@@ -206,7 +206,8 @@ func TakeIdForKey(ctx context.Context, key string, newStep uint32) (*TakeIdResul
 	// update cur_id = cur_id + step
 	err = txStmtExec(ctx, tx,
 		statement,
-		key, defaultCurId+uint64(newStep), newStep, now, now, now,
+		key, defaultCurId+uint64(newStep), newStep, now, now,
+		now,
 	)
 	if err != nil {
 		log.Printf("dao tx stmt exec err: %v\n", err)

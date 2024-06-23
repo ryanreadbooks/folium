@@ -21,11 +21,14 @@ type buffer struct {
 	seg2 *segment
 
 	closeCh chan struct{}
+	step    uint32 // step for changing the step in db
+	ctx     context.Context
+	cancel  context.CancelFunc
 }
 
-func newBuffer(ctx context.Context, key string) (*buffer, error) {
+func newBuffer(ctx context.Context, key string, step uint32) (*buffer, error) {
 	seg1 := newSegment(key)
-	err := seg1.fetchDB(ctx, 0) // need to be synced with db
+	err := seg1.fetchDB(ctx, step) // need to be synced with db
 	if err != nil {
 		return nil, err
 	}
@@ -34,12 +37,16 @@ func newBuffer(ctx context.Context, key string) (*buffer, error) {
 	seg2 := newSegment(key)
 	seg2.name = "seg2"
 
+	cctx, ccancel := context.WithCancel(context.Background())
 	b := &buffer{
 		key:     key,
 		seg1:    seg1,
 		seg2:    seg2, // we do not fetchDB in the first place
 		cur:     seg1,
 		closeCh: make(chan struct{}),
+		step:    step,
+		ctx:     cctx,
+		cancel:  ccancel,
 	}
 
 	// go b.worker()
@@ -52,7 +59,7 @@ func (b *buffer) swap(ctx context.Context) error {
 	if b.cur == b.seg1 {
 		// make sure we are swapping into maxinum segment
 		if b.seg1.max > b.seg2.max {
-			err := b.seg2.fetchDB(ctx, 0)
+			err := b.seg2.fetchDB(ctx, b.step)
 			if err != nil {
 				log.Printf("buffer swap to seg2 fetchDB err: %v\n", err)
 				return err
@@ -62,7 +69,7 @@ func (b *buffer) swap(ctx context.Context) error {
 		b.cur = b.seg2
 	} else {
 		if b.seg1.max < b.seg2.max {
-			err := b.seg1.fetchDB(ctx, 0)
+			err := b.seg1.fetchDB(ctx, b.step)
 			if err != nil {
 				log.Printf("buffer swap to seg1 fetchDB err: %v\n", err)
 				return err
@@ -122,7 +129,7 @@ func (b *buffer) preload() {
 	// we hit watermark
 	if b.curSeg().hitMark(watermark) {
 		// load the other segment
-		err := b.bakSeg().fetchDB(context.Background(), 0)
+		err := b.bakSeg().fetchDB(b.ctx, b.step)
 		if err != nil {
 			log.Printf("buffer postGetId fetchDB err: %v\n", err)
 			return
@@ -148,6 +155,7 @@ func (b *buffer) worker() {
 			b.preload()
 		case <-b.closeCh:
 			log.Println("buffer worker exited")
+			b.cancel()
 			return
 		}
 	}

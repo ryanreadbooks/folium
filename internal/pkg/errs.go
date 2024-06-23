@@ -7,16 +7,16 @@ import (
 )
 
 type Err struct {
-	Code int    `json:"code"`
+	Code int    `json:"code"` // for simplicity, we use grpc status code here
 	Msg  string `json:"msg"`
 }
 
-func (e Err) Message(msg string) Err {
+func (e Err) Message(msg string) *Err {
 	ne := Err{
 		Code: e.Code,
 	}
 	ne.Msg = msg
-	return ne
+	return &ne
 }
 
 func (e Err) Error() string {
