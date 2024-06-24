@@ -1,6 +1,7 @@
 package dao
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -37,6 +38,13 @@ func InitDB() {
 	db.SetMaxOpenConns(100)
 	db.SetMaxIdleConns(100)
 	db.SetConnMaxLifetime(time.Minute * 3)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	err = db.PingContext(ctx)
+	if err != nil {
+		panic(fmt.Sprintf("failed to connect db: %v", err))
+	}
 
 	log.Println("db inited")
 }

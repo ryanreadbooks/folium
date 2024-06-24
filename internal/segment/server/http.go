@@ -42,7 +42,8 @@ func CloseHttp() {
 }
 
 func initRoute() {
-	eng = gin.Default()
+	eng = gin.New()
+	eng.Use(gin.Recovery())
 
 	// /api/v1/next/:key?step=xxx
 	eng.GET("/api/v1/next/:key", nextForKey)
