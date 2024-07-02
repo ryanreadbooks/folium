@@ -14,6 +14,11 @@ message NextResponse {
   string msg = 2;
 }
 
+message PingRequest {}
+
+message PingResponse {}
+
 service FoliumService {
   rpc Next(NextRequest) returns (NextResponse);
+  rpc Ping(PingRequest) returns (PingResponse);
 }

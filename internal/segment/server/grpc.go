@@ -8,6 +8,7 @@ import (
 	apiv1 "github.com/ryanreadbooks/folium/api/v1"
 	"github.com/ryanreadbooks/folium/internal/pkg"
 	"github.com/ryanreadbooks/folium/internal/segment/idgen"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -56,4 +57,8 @@ func (s *grpcServer) Next(ctx context.Context, req *apiv1.NextRequest) (*apiv1.N
 	return &apiv1.NextResponse{
 		Id: id,
 	}, nil
+}
+
+func (s *grpcServer) Ping(ctx context.Context, in *apiv1.PingRequest) (*apiv1.PingResponse, error) {
+	return &apiv1.PingResponse{}, nil
 }

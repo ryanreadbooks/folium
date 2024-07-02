@@ -23,6 +23,7 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type FoliumServiceClient interface {
 	Next(ctx context.Context, in *NextRequest, opts ...grpc.CallOption) (*NextResponse, error)
+	Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PingResponse, error)
 }
 
 type foliumServiceClient struct {
@@ -42,11 +43,21 @@ func (c *foliumServiceClient) Next(ctx context.Context, in *NextRequest, opts ..
 	return out, nil
 }
 
+func (c *foliumServiceClient) Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PingResponse, error) {
+	out := new(PingResponse)
+	err := c.cc.Invoke(ctx, "/folium.api.folium.FoliumService/Ping", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // FoliumServiceServer is the server API for FoliumService service.
 // All implementations must embed UnimplementedFoliumServiceServer
 // for forward compatibility
 type FoliumServiceServer interface {
 	Next(context.Context, *NextRequest) (*NextResponse, error)
+	Ping(context.Context, *PingRequest) (*PingResponse, error)
 	mustEmbedUnimplementedFoliumServiceServer()
 }
 
@@ -56,6 +67,9 @@ type UnimplementedFoliumServiceServer struct {
 
 func (UnimplementedFoliumServiceServer) Next(context.Context, *NextRequest) (*NextResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Next not implemented")
+}
+func (UnimplementedFoliumServiceServer) Ping(context.Context, *PingRequest) (*PingResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Ping not implemented")
 }
 func (UnimplementedFoliumServiceServer) mustEmbedUnimplementedFoliumServiceServer() {}
 
@@ -88,6 +102,24 @@ func _FoliumService_Next_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
+func _FoliumService_Ping_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PingRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FoliumServiceServer).Ping(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/folium.api.folium.FoliumService/Ping",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FoliumServiceServer).Ping(ctx, req.(*PingRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // FoliumService_ServiceDesc is the grpc.ServiceDesc for FoliumService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -98,6 +130,10 @@ var FoliumService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Next",
 			Handler:    _FoliumService_Next_Handler,
+		},
+		{
+			MethodName: "Ping",
+			Handler:    _FoliumService_Ping_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

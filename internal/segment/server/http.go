@@ -47,6 +47,7 @@ func initRoute() {
 
 	// /api/v1/next/:key?step=xxx
 	eng.GET("/api/v1/next/:key", nextForKey)
+	eng.GET("/api/v1/health", health)
 }
 
 type Result struct {
@@ -69,4 +70,8 @@ func nextForKey(c *gin.Context) {
 	c.JSON(http.StatusOK, &Result{
 		Id: id,
 	})
+}
+
+func health(c *gin.Context) {
+	c.Status(http.StatusOK)
 }

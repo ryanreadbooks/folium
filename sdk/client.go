@@ -34,8 +34,13 @@ func NewClient(opts ...ClientOpt) (*Client, error) {
 
 type Impl interface {
 	Next(ctx context.Context, key string, step uint32) (uint64, error)
+	Ping(ctx context.Context) error
 }
 
 func (c *Client) GetId(ctx context.Context, key string, step uint32) (uint64, error) {
 	return c.impl.Next(ctx, key, step)
+}
+
+func (c *Client) Ping(ctx context.Context) error {
+	return c.impl.Ping(ctx)
 }

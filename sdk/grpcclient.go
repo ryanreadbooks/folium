@@ -7,6 +7,7 @@ import (
 	apiv1 "github.com/ryanreadbooks/folium/api/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 )
 
@@ -17,7 +18,8 @@ type grpcClient struct {
 func WithGrpc(addr string) ClientOpt {
 	return func(c *Client) error {
 		c.isGrpc = true
-		cc, err := grpc.NewClient(addr)
+		cc, err := grpc.NewClient(addr,
+			grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
 			return err
 		}
@@ -49,10 +51,22 @@ func (c *grpcClient) Next(ctx context.Context, key string, step uint32) (uint64,
 				baseErr = ErrGetIdFailed
 			}
 
-			return 0, fmt.Errorf("%v: %v", baseErr, grpcerr.Message())
+			return 0, fmt.Errorf("next err %v: %v", baseErr, grpcerr.Message())
 		}
 		return 0, err
 	}
 
 	return resp.Id, nil
+}
+
+func (c *grpcClient) Ping(ctx context.Context) error {
+	_, err := c.cli.Ping(ctx, &apiv1.PingRequest{})
+	if err != nil {
+		if grpcerr, ok := status.FromError(err); ok {
+			return fmt.Errorf("ping err %v", grpcerr.Message())
+		}
+		return err
+	}
+
+	return nil
 }

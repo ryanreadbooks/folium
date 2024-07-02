@@ -65,3 +65,17 @@ func (c *httpClient) Next(ctx context.Context, key string, step uint32) (uint64,
 
 	return result.Id, nil
 }
+
+func (c *httpClient) Ping(ctx context.Context) error {
+	path := fmt.Sprintf("http://%s/api/v1/health", c.addr)
+	resp, err := c.c.Get(path)
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("ping err: statuscode: %d", resp.StatusCode)
+	}
+
+	return nil
+}
