@@ -2,6 +2,7 @@ package server
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -25,11 +26,11 @@ func CloseServer() {
 	idgen.Close()
 }
 
-func InitHttp() {
+func InitHttp(port int) {
 	initRoute()
 
 	go func() {
-		if err := http.ListenAndServe(":9527", eng); !errors.Is(err, http.ErrServerClosed) {
+		if err := http.ListenAndServe(fmt.Sprintf(":%d", port), eng); !errors.Is(err, http.ErrServerClosed) {
 			log.Fatal(err)
 		}
 	}()

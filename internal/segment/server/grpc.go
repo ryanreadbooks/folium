@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net"
 
@@ -18,11 +19,11 @@ var (
 	serverGrpc *grpc.Server
 )
 
-func InitGrpc() {
+func InitGrpc(port int) {
 	serverGrpc = grpc.NewServer()
 	apiv1.RegisterFoliumServiceServer(serverGrpc, &grpcServer{})
 
-	listener, err := net.Listen("tcp", ":9528")
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		log.Fatal(err)
 	}
